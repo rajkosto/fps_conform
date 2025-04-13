@@ -122,7 +122,8 @@ function MUX () {
 
 # Loop to convert all files with mkv extension in current directory
 echo "PROCESSING $FOLDER" > fps_error.log
-for INPUT_FILE in "$FOLDER"/*.mp4; do
+mapfile -d '' -t files < <(find "$FOLDER" -type f \( -iname "*.mp4" -o -iname "*.mkv" \) -print0)
+for INPUT_FILE in "${files[@]}"; do
   echo "FILE: $INPUT_FILE"
 
   # Get basename of file
@@ -244,7 +245,10 @@ for INPUT_FILE in "$FOLDER"/*.mp4; do
     rm -f "$OUTPUT_AUD/$OUTPUT_FILE"
 
     # Finally, replace the input file with the converted one
-    mv -f "$OUTPUT_MUX/$OUTPUT_FILE" "$INPUT_FILE"    
+    mv -f "$OUTPUT_MUX/$OUTPUT_FILE" "$INPUT_FILE"
+    echo "CONVERTED $INPUT_FILE" >> fps_error.log
+  else
+    echo "SKIPPED $INPUT_FILE" >> fps_error.log
   fi
 done
 
