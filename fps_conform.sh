@@ -132,6 +132,9 @@ for INPUT_FILE in "${files[@]}"; do
 
   # Get framerate of input file to make calculate conversion
   FPS_IN=$("$MEDIAINFO_PATH" --Inform="Video;%FrameRate_Num%/%FrameRate_Den%" "$INPUT_FILE")
+  if [[ "$FPS_IN" == "/" ]]; then
+    FPS_IN=$("$MEDIAINFO_PATH" --Inform="Video;%FrameRate%" "$INPUT_FILE")
+  fi
 
   # Check if there are subtitles embedded and if so what type
   SUBTITLE_TYPE=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream=codec_name "$INPUT_FILE")
