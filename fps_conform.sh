@@ -1,7 +1,18 @@
 #!/bin/bash
 
+FFMPEG_PATH="C:/ffmpeg/bin/ffmpeg.exe"
+FFPROBE_PATH="C:/ffmpeg/bin/ffprobe.exe"
+MKVMERGE_PATH="C:/Program Files/MKVToolNix/mkvmerge.exe"
+#AUDIO_CODEC="-c:a libopus -b:a 128k"
+AUDIO_CODEC="-c:a libfdk_aac -profile:a aac_he_v2 -b:a 128k"
+
 # Current directory script is being executed from
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Check if cygpath is available (indicates we're in Cygwin or a compatible environment)
+if command -v cygpath >/dev/null 2>&1; then
+  # Convert to Windows-style path
+  DIR=$(cygpath -w "$DIR")
+fi
 
 # Folder parameter
 FOLDER="$1"
@@ -34,15 +45,13 @@ fi
 OUTPUT_VID="$DIR/temp/vid_$FPS"
 OUTPUT_AUD="$DIR/temp/aud_$FPS"
 OUTPUT_SUB="$DIR/temp/sub_$FPS"
+OUTPUT_MUX="$DIR/temp/mux_$FPS"
 
 # Making output directories
 mkdir -p "$OUTPUT_VID"
 mkdir -p "$OUTPUT_AUD"
 mkdir -p "$OUTPUT_SUB"
-
-# Folder for finished conversion
-CONVERTED="$DIR/converted"
-mkdir -p "$CONVERTED"
+mkdir -p "$OUTPUT_MUX"
 
 MSG_ERROR=" ➥ [ERROR ]"
 MSG_NOTICE=" ➥ [NOTICE]"
@@ -52,12 +61,12 @@ function CONVERT_VID () {
   echo "$MSG_NOTICE Starting video conversion"
 
   # Get index of video track
-  VID_INDEX=$(ffprobe -v error -of default=noprint_wrappers=1:nokey=1 -select_streams v:0 -show_entries stream=index "$1")
+  VID_INDEX=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams v:0 -show_entries stream=index "$1")
 
   # Alternate for weird-ass files
-  # mkvmerge -q -o "$OUTPUT_VID/$OUTPUT_FILE" --sync "0:0,25/24" -d "$VID_INDEX" -A -S -T "$1"
+  # "$MKVMERGE_PATH" -q -o "$OUTPUT_VID/$OUTPUT_FILE" --sync "0:0,25/24" -d "$VID_INDEX" -A -S -T "$1" 2>"$OUTPUT_VID/$OUTPUT_FILE.err"
 
-  mkvmerge -q -o "$OUTPUT_VID/$OUTPUT_FILE" --default-duration "$VID_INDEX:$FPS_OUT" -d "$VID_INDEX" -A -S -T "$1"
+  "$MKVMERGE_PATH" -q -o "$OUTPUT_VID/$OUTPUT_FILE" --default-duration "$VID_INDEX:$FPS_OUT" -d "$VID_INDEX" -A -S -T "$1" 2>"$OUTPUT_VID/$OUTPUT_FILE.err"
 }
 
 # Convert audio to desired length, compensating pitch
@@ -66,7 +75,7 @@ function CONVERT_AUD () {
   local channels
   local layout
 
-  channels=$(ffprobe -show_entries stream=channels -select_streams a:0 -of compact=p=0:nk=1 -v 0 "$1")
+  channels=$("$FFPROBE_PATH" -show_entries stream=channels -select_streams a:0 -of compact=p=0:nk=1 -v 0 "$1")
 
   if [[ "$channels" == "8" ]]; then
     layout="7.1"
@@ -76,7 +85,7 @@ function CONVERT_AUD () {
     layout="stereo"
   fi
 
-  ffmpeg -y -v error -i "$1" -c:a libopus -b:a 128k -filter:a "atempo=$TEMPO,aformat=channel_layouts=$layout" -vn "$OUTPUT_AUD/$OUTPUT_FILE"
+  "$FFMPEG_PATH" -y -v error -i "$1" $AUDIO_CODEC -filter:a "atempo=$TEMPO,aformat=channel_layouts=$layout" -vn "$OUTPUT_AUD/$OUTPUT_FILE" 2>"$OUTPUT_AUD/$OUTPUT_FILE.err"
 }
 
 # Convert subtitles to desired length
@@ -84,12 +93,12 @@ function CONVERT_SUB () {
   echo "$MSG_NOTICE Starting subtitle conversion"
 
   # Get subtitle language
-  SUBTITLE_LANG=$(ffprobe -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream_tags=language "$1")
+  SUBTITLE_LANG=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream_tags=language "$1")
 
   # Extract subtitle file if necessary, perform FPS change
   if [[ ! -s "$SUBTITLE_EXT" ]]; then
     echo "$MSG_NOTICE Using embedded subtitles"
-    ffmpeg -y -v error -i "$1" -map 0:s:0 "$OUTPUT_SUB/${OUTPUT_FILE}_original.srt"
+    "$FFMPEG_PATH" -y -v error -i "$1" -map 0:s:0 "$OUTPUT_SUB/${OUTPUT_FILE}_original.srt"
     perl "$DIR/srt/srtshift.pl" "${FPS_IN}-${FPS}" "${OUTPUT_SUB}/${OUTPUT_FILE}_original.srt" "${OUTPUT_SUB}/$OUTPUT_FILE" > "$DIR"/temp/perl.log 2>&1
   else
     echo "$MSG_NOTICE Using external subtitles"
@@ -101,28 +110,29 @@ function CONVERT_SUB () {
 function MUX () {
   echo "$MSG_NOTICE Starting muxing"
   if [[ "$SUBTITLE_TYPE" == "srt" || "$SUBTITLE_TYPE" == "subrip" && -n "$SUBTITLE_LANG" ]]; then
-    ffmpeg -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 -metadata:s:2 language="$SUBTITLE_LANG" "$CONVERTED/$OUTPUT_FILE"
+    "$FFMPEG_PATH" -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 -metadata:s:2 language="$SUBTITLE_LANG" "$OUTPUT_MUX/$OUTPUT_FILE" 2>"$OUTPUT_MUX/$OUTPUT_FILE.err"
   elif [[ "$SUBTITLE_TYPE" == "srt" || "$SUBTITLE_TYPE" == "subrip" ]]; then
-    ffmpeg -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 "$CONVERTED/$OUTPUT_FILE"
+    "$FFMPEG_PATH" -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 "$OUTPUT_MUX/$OUTPUT_FILE" 2>"$OUTPUT_MUX/$OUTPUT_FILE.err"
   elif [[ -s "$SUBTITLE_EXT" ]]; then
-    ffmpeg -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 "$CONVERTED/$OUTPUT_FILE"
+    "$FFMPEG_PATH" -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -i "$OUTPUT_SUB/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 -map 2:s:0 "$OUTPUT_MUX/$OUTPUT_FILE" 2>"$OUTPUT_MUX/$OUTPUT_FILE.err"
   else
-    ffmpeg -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 "$CONVERTED/$OUTPUT_FILE"
+    "$FFMPEG_PATH" -y -v error -i "$OUTPUT_VID/$OUTPUT_FILE" -i "$OUTPUT_AUD/$OUTPUT_FILE" -c copy -map 0:v:0 -map 1:a:0 "$OUTPUT_MUX/$OUTPUT_FILE" 2>"$OUTPUT_MUX/$OUTPUT_FILE.err"
   fi
 }
 
 # Loop to convert all files with mkv extension in current directory
-for INPUT_FILE in "$FOLDER"/*.mkv; do
+echo "PROCESSING $FOLDER" > fps_error.log
+for INPUT_FILE in "$FOLDER"/*.mp4; do
   echo "FILE: $INPUT_FILE"
 
   # Get basename of file
   OUTPUT_FILE=$(basename "$INPUT_FILE")
 
   # Get framerate of input file to make calculate conversion
-  FPS_IN=$(ffprobe -v error -of default=noprint_wrappers=1:nokey=1 -select_streams v:0 -show_entries stream=r_frame_rate "$INPUT_FILE")
+  FPS_IN=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams v:0 -show_entries stream=r_frame_rate "$INPUT_FILE")
 
   # Check if there are subtitles embedded and if so what type
-  SUBTITLE_TYPE=$(ffprobe -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream=codec_name "$INPUT_FILE")
+  SUBTITLE_TYPE=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream=codec_name "$INPUT_FILE")
 
   # Check for external subtitles if there are none embedded
   if [[ -z "$SUBTITLE_TYPE" ]]; then
@@ -175,23 +185,66 @@ for INPUT_FILE in "$FOLDER"/*.mkv; do
     fi
   else
     echo "$ERR_UNSUPPORTED"
+    echo "$INPUT_FILE $ERR_UNSUPPORTED" >> fps_error.log
     PASS="true"
   fi
 
   # Do conversion for files not set to pass
   if [[ "$PASS" != "true" ]]; then
     CONVERT_VID "$INPUT_FILE"
+    if [ -s "$OUTPUT_VID/$OUTPUT_FILE.err" ]; then
+      echo -n "$MSG_ERROR During video extraction: "
+      cat "$OUTPUT_VID/$OUTPUT_FILE.err"
+      echo ""
+      echo -n "$INPUT_FILE $MSG_ERROR During video extraction: " >> fps_error.log
+      cat "$OUTPUT_VID/$OUTPUT_FILE.err" >> fps_error.log
+      echo "" >> fps_error.log
+      rm -f "$OUTPUT_VID/$OUTPUT_FILE.err"
+      rm -f "$OUTPUT_VID/$OUTPUT_FILE"
+      continue
+    fi
+    rm -f "$OUTPUT_VID/$OUTPUT_FILE.err"
     CONVERT_AUD "$INPUT_FILE"
+    if [ -s "$OUTPUT_AUD/$OUTPUT_FILE.err" ]; then
+      echo -n "$MSG_ERROR During audio conversion: "
+      cat "$OUTPUT_AUD/$OUTPUT_FILE.err"
+      echo ""
+      echo -n "$INPUT_FILE $MSG_ERROR During audio conversion: " >> fps_error.log
+      cat "$OUTPUT_AUD/$OUTPUT_FILE.err" >> fps_error.log
+      echo "" >> fps_error.log
+      rm -f "$OUTPUT_AUD/$OUTPUT_FILE.err"
+      rm -f "$OUTPUT_VID/$OUTPUT_FILE"
+      rm -f "$OUTPUT_AUD/$OUTPUT_FILE"      
+      continue
+    fi
+    rm -f "$OUTPUT_AUD/$OUTPUT_FILE.err"
     if [[ "$SUBTITLE_TYPE" == "srt" || "$SUBTITLE_TYPE" == "subrip" || -s "$SUBTITLE_EXT" ]]; then
       CONVERT_SUB "$INPUT_FILE"
     else
       echo "$MSG_NOTICE No SRT subtitles found"
     fi
     MUX "$INPUT_FILE"
+    if [ -s "$OUTPUT_MUX/$OUTPUT_FILE.err" ]; then
+      echo -n "$MSG_ERROR During mux: "
+      cat "$OUTPUT_MUX/$OUTPUT_FILE.err"
+      echo ""
+      echo -n "$INPUT_FILE $MSG_ERROR During mux: " >> fps_error.log
+      cat "$OUTPUT_MUX/$OUTPUT_FILE.err" >> fps_error.log
+      echo "" >> fps_error.log
+      rm -f "$OUTPUT_MUX/$OUTPUT_FILE.err"
+      rm -f "$OUTPUT_MUX/$OUTPUT_FILE"
+      rm -f "$OUTPUT_VID/$OUTPUT_FILE"
+      rm -f "$OUTPUT_AUD/$OUTPUT_FILE" 
+      continue
+    fi
+    rm -f "$OUTPUT_MUX/$OUTPUT_FILE.err"
 
     # Delete intermediary files to save space
     rm -f "$OUTPUT_VID/$OUTPUT_FILE"
     rm -f "$OUTPUT_AUD/$OUTPUT_FILE"
+
+    # Finally, replace the input file with the converted one
+    mv -f "$OUTPUT_MUX/$OUTPUT_FILE" "$INPUT_FILE"    
   fi
 done
 
