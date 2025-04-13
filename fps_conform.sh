@@ -159,7 +159,7 @@ for INPUT_FILE in "${files[@]}"; do
   PASS="false"
 
   # Determine action, tempo
-  if [[ "$FPS_IN" == "24000/1001" || "$FPS_IN" == "23976/1000" ]]; then
+  if [[ "$FPS_IN" == "24000/1001" || "$FPS_IN" == "23976/1000" || "$FPS_IN" == "23.976" ]]; then
     FPS_IN="23.976"
     if [[ "$FPS" == "25" ]]; then
       FPS_OUT="25p"
