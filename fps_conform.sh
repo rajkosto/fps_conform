@@ -2,6 +2,7 @@
 
 FFMPEG_PATH="C:/ffmpeg/bin/ffmpeg.exe"
 FFPROBE_PATH="C:/ffmpeg/bin/ffprobe.exe"
+MEDIAINFO_PATH="C:/ffmpeg/mediainfo/MediaInfo.exe"
 MKVMERGE_PATH="C:/Program Files/MKVToolNix/mkvmerge.exe"
 #AUDIO_CODEC="-c:a libopus -b:a 128k"
 AUDIO_CODEC="-c:a libfdk_aac -profile:a aac_he_v2 -b:a 128k"
@@ -130,7 +131,7 @@ for INPUT_FILE in "${files[@]}"; do
   OUTPUT_FILE=$(basename "$INPUT_FILE")
 
   # Get framerate of input file to make calculate conversion
-  FPS_IN=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams v:0 -show_entries stream=r_frame_rate "$INPUT_FILE")
+  FPS_IN=$("$MEDIAINFO_PATH" --Inform="Video;%FrameRate_Num%/%FrameRate_Den%" "$INPUT_FILE")
 
   # Check if there are subtitles embedded and if so what type
   SUBTITLE_TYPE=$("$FFPROBE_PATH" -v error -of default=noprint_wrappers=1:nokey=1 -select_streams s:0 -show_entries stream=codec_name "$INPUT_FILE")
@@ -150,7 +151,7 @@ for INPUT_FILE in "${files[@]}"; do
   PASS="false"
 
   # Determine action, tempo
-  if [[ "$FPS_IN" == "24000/1001" ]]; then
+  if [[ "$FPS_IN" == "24000/1001" || "$FPS_IN" == "23976/1000" ]]; then
     FPS_IN="23.976"
     if [[ "$FPS" == "25" ]]; then
       FPS_OUT="25p"
