@@ -255,7 +255,11 @@ for INPUT_FILE in "${files[@]}"; do
 
     # Finally, replace the input file with the converted one
     mv -f "$OUTPUT_MUX/$OUTPUT_FILE" "$INPUT_FILE"
-    echo "CONVERTED $INPUT_FILE" >> fps_error.log
+    if [ $? -ne 0 ]; then
+      echo "MV FAILED $INPUT_FILE" >> fps_error.log
+    else
+      echo "CONVERTED $INPUT_FILE" >> fps_error.log
+    fi
   else
     echo "SKIPPED $INPUT_FILE" >> fps_error.log
   fi
