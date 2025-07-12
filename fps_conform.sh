@@ -215,7 +215,7 @@ for INPUT_FILE in "${files[@]}"; do
     fi
     rm -f "$OUTPUT_VID/$OUTPUT_FILE.err"
     CONVERT_AUD "$INPUT_FILE"
-    if grep -v 'env_facs_q' "$OUTPUT_AUD/$OUTPUT_FILE.err" | grep -q '.'; then
+    if grep -Ev 'facs_q|Last message repeated' "$OUTPUT_AUD/$OUTPUT_FILE.err" | grep -q '.'; then
       echo -n "$MSG_ERROR During audio conversion: "
       cat "$OUTPUT_AUD/$OUTPUT_FILE.err"
       echo ""
