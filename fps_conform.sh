@@ -5,7 +5,7 @@ FFPROBE_PATH="C:/ffmpeg/bin/ffprobe.exe"
 MEDIAINFO_PATH="C:/ffmpeg/mediainfo/MediaInfo.exe"
 MKVMERGE_PATH="C:/Program Files/MKVToolNix/mkvmerge.exe"
 #AUDIO_CODEC="-c:a libopus -b:a 128k"
-AUDIO_CODEC="-c:a libfdk_aac -profile:a aac_he_v2 -b:a 128k"
+AUDIO_CODEC="-c:a libfdk_aac -b:a 192k"
 
 # Current directory script is being executed from
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -86,12 +86,7 @@ function CONVERT_AUD () {
     layout="stereo"
   fi
 
-  file_codec="$AUDIO_CODEC"
-  if [[ "$layout" != "stereo" && "$file_codec" == *aac_he_v2* ]]; then
-    file_codec="${file_codec//aac_he_v2/aac_he}"
-  fi
-
-  "$FFMPEG_PATH" -y -v error -i "$1" $file_codec -filter:a "atempo=$TEMPO,aformat=channel_layouts=$layout" -vn "$OUTPUT_AUD/$OUTPUT_FILE" 2>"$OUTPUT_AUD/$OUTPUT_FILE.err"
+  "$FFMPEG_PATH" -y -v error -i "$1" $AUDIO_CODEC -filter:a "atempo=$TEMPO,aformat=channel_layouts=$layout" -vn "$OUTPUT_AUD/$OUTPUT_FILE" 2>"$OUTPUT_AUD/$OUTPUT_FILE.err"
 }
 
 # Convert subtitles to desired length
